@@ -12,12 +12,8 @@ class LSrouter(Router):
         self.network_graph = {addr: {}}
         self.sequence_numbers = {addr: 0}
         self.forwarding_table = {}
-        self.link_costs = {}            # port -> (endpoint, cost)
-        self._endpoint_to_port = {}     # endpoint -> port
-
-    # ------------------------------------------------------------------ #
-    #  Packet helpers                                                    #
-    # ------------------------------------------------------------------ #
+        self.link_costs = {}            
+        self._endpoint_to_port = {}    
 
     def _build_routing_packet(self):
         payload = {
@@ -39,10 +35,6 @@ class LSrouter(Router):
             if port != incoming_port:
                 self.send(port, packet)
 
-    # ------------------------------------------------------------------ #
-    #  Topology                                                          #
-    # ------------------------------------------------------------------ #
-
     def _update_network_graph(self, src, new_ls, seq):
         known_seq = self.sequence_numbers.get(src)
         if known_seq is not None and seq <= known_seq:
@@ -57,10 +49,6 @@ class LSrouter(Router):
         return True
 
     def _dijkstra(self):
-        """
-        Phiên bản tối ưu: Không clone đồ thị, sử dụng lười (lazy initialization) cho dist.
-        """
-        # Sử dụng trực tiếp self.network_graph để tiết kiệm tài nguyên gán/copy tài nguyên
         graph = self.network_graph
 
         dist = {self.addr: 0}
@@ -73,18 +61,14 @@ class LSrouter(Router):
             if u in visited:
                 continue
             visited.add(u)
-
-            # Duyệt qua các node hàng xóm từ góc nhìn của node u
             for v, w in graph.get(u, {}).items():
                 nd = d + w
-                # Lazy check: nếu v chưa có trong dist tức là khoảng cách bằng vô cùng (inf)
                 if nd < dist.get(v, float('inf')):
                     dist[v] = nd
                     parent[v] = u
                     heapq.heappush(heap, (nd, v))
 
         result = {}
-        # Chỉ duyệt qua các node thực sự kết nối được (nằm trong cây parent)
         for dst in parent:
             if dst == self.addr:
                 continue
@@ -104,10 +88,6 @@ class LSrouter(Router):
             for dst, (_, next_hop) in self._dijkstra().items()
             if next_hop in self._endpoint_to_port
         }
-
-    # ------------------------------------------------------------------ #
-    #  Event handlers                                                    #
-    # ------------------------------------------------------------------ #
 
     def handle_packet(self, port, packet):
         if packet.kind != Packet.ROUTING:
@@ -143,7 +123,6 @@ class LSrouter(Router):
         self._endpoint_to_port.pop(endpoint, None)
         self.network_graph[self.addr].pop(endpoint, None)
         
-        # Giữ nguyên thiết kế chuẩn của bạn: Không can thiệp sửa LSA của node khác ở đây
         self.sequence_numbers[self.addr] += 1
         self._update_forwarding_table()
         self._broadcast_link_state()
